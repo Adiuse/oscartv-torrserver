@@ -46,8 +46,10 @@ func newSeasonTorrent(t *testing.T) (*BTServer, *Torrent) {
 	info.Pieces = make([]byte, 20*episodes)
 	mi := metainfo.MetaInfo{InfoBytes: bencode.MustMarshal(info)}
 	spec := &torrent.TorrentSpec{
-		InfoBytes:   mi.InfoBytes,
-		InfoHash:    mi.HashInfoBytes(),
+		AddTorrentOpts: torrent.AddTorrentOpts{
+			InfoBytes: mi.InfoBytes,
+			InfoHash:  mi.HashInfoBytes(),
+		},
 		DisplayName: info.Name,
 	}
 	tor, err := NewTorrent(spec, bt)
