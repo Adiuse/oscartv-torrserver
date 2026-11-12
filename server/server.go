@@ -145,7 +145,11 @@ func removeAllFiles(path string) {
 }
 
 func WaitServer() string {
-	err := web.Wait()
+	return WaitServerReady(nil)
+}
+
+func WaitServerReady(ready chan<- struct{}) string {
+	err := web.WaitReady(ready)
 	if err != nil {
 		return err.Error()
 	}
