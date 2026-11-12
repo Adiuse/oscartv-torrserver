@@ -110,12 +110,16 @@ func parseTLSHandshakeError(msg string) (host, reason string, ok bool) {
 
 // serve runs fn in the background and reports unexpected errors to Wait.
 func serve(fn func() error) {
+	wait := currentWaitChannel()
 	go func() {
 		err := fn()
 		if err == nil || errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
 			return
 		}
-		waitChan <- err
+		select {
+		case wait <- err:
+		default:
+		}
 	}()
 }
 
