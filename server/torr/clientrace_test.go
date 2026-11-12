@@ -144,8 +144,10 @@ func TestNewTorrentDoesNotDeadlock(t *testing.T) {
 	mi := metainfo.MetaInfo{InfoBytes: bencode.MustMarshal(info)}
 	// так же собирает сам клиент в spec.go из MetaInfo
 	spec := &torrent.TorrentSpec{
-		InfoBytes:   mi.InfoBytes,
-		InfoHash:    mi.HashInfoBytes(),
+		AddTorrentOpts: torrent.AddTorrentOpts{
+			InfoBytes: mi.InfoBytes,
+			InfoHash:  mi.HashInfoBytes(),
+		},
 		DisplayName: info.Name,
 	}
 
