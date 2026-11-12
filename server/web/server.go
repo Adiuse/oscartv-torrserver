@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	gstreamer "server/gstreamer/bridge"
@@ -38,8 +39,10 @@ import (
 )
 
 var (
-	BTS      = torr.NewBTS()
-	waitChan = make(chan error)
+	BTS                    = torr.NewBTS()
+	waitChanMu             sync.RWMutex
+	waitChan               = make(chan error, 1)
+	EmbeddedRouteInstaller func(*gin.Engine)
 	// stopRenew stops the self-signed cert renewal loop.
 	stopRenew chan struct{}
 )
@@ -57,6 +60,9 @@ var (
 // @externalDocs.description	OpenAPI
 // @externalDocs.url			https://swagger.io/resources/open-api/
 func Start() error {
+	waitChanMu.Lock()
+	waitChan = make(chan error, 1)
+	waitChanMu.Unlock()
 	log.TLogln("Start TorrServer " + version.Version + " torrent " + version.GetTorrentVersion())
 	ips := GetLocalIps()
 	if len(ips) > 0 {
@@ -98,6 +104,9 @@ func Start() error {
 
 	route := gin.New()
 	route.Use(log.WebLogger(), waf.WAF(), gin.Recovery(), cors.New(corsCfg), location.Default())
+	if settings.Embedded && EmbeddedRouteInstaller != nil {
+		EmbeddedRouteInstaller(route)
+	}
 	auth.SetupAuth(route)
 
 	route.GET("/echo", echo)
@@ -245,10 +254,26 @@ func logAddrs(msg, port string) {
 }
 
 func Wait() error {
-	return <-waitChan
+	return WaitReady(nil)
+}
+
+func WaitReady(ready chan<- struct{}) error {
+	wait := currentWaitChannel()
+	if ready != nil {
+		close(ready)
+	}
+	return <-wait
+}
+
+func currentWaitChannel() chan error {
+	waitChanMu.RLock()
+	wait := waitChan
+	waitChanMu.RUnlock()
+	return wait
 }
 
 func Stop() {
+	wait := currentWaitChannel()
 	// stop accepting requests before tearing down what they depend on
 	if stopRenew != nil {
 		close(stopRenew)
@@ -262,7 +287,10 @@ func Stop() {
 	// Unmount FUSE filesystem if mounted
 	fuse.FuseCleanup()
 	BTS.Disconnect()
-	waitChan <- nil
+	select {
+	case wait <- nil:
+	default:
+	}
 }
 
 // echo godoc
