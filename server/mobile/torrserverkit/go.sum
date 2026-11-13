@@ -129,6 +129,7 @@ github.com/anacrolix/sync v0.6.0/go.mod h1:zigHZiBXkcjo9uNACGCpovT+wNKMbzjO1qN2+
 github.com/anacrolix/tagflag v0.0.0-20180109131632-2146c8d41bf0/go.mod h1:1m2U/K6ZT+JZG0+bdMK6qauP49QT4wE5pmhJXOKKCHw=
 github.com/anacrolix/tagflag v1.0.0/go.mod h1:1m2U/K6ZT+JZG0+bdMK6qauP49QT4wE5pmhJXOKKCHw=
 github.com/anacrolix/tagflag v1.1.0/go.mod h1:Scxs9CV10NQatSmbyjqmqmeQNwGzlNe0CMUMIxqHIG8=
+github.com/anacrolix/torrent v1.59.1/go.mod h1:4yT/cQCiAk4/hL3kZawq/dUUgND8FWIcolYlfnQ4P9M=
 github.com/anacrolix/utp v0.2.0 h1:65Cdmr6q9WSw2KsM+rtJFu7rqDzLl2bdysf4KlNPcFI=
 github.com/anacrolix/utp v0.2.0/go.mod h1:HGk4GYQw1O/3T1+yhqT/F6EcBd+AAwlo9dYErNy7mj8=
 github.com/antihax/optional v1.0.0/go.mod h1:uupD/76wgC+ih3iEmQUL+0Ugr19nfwCT1kdvxnR2qWY=
