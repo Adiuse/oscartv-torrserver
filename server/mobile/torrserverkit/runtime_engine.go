@@ -410,10 +410,12 @@ func (c *runtimeCandidate) resolve(
 ) {
 	select {
 	case <-c.torrent.GotInfo():
-	case <-time.After(0):
-		select {
-		case <-c.torrent.GotInfo():
-		}
+	case <-c.torrent.Closed():
+		c.mu.Lock()
+		c.readyErr = errors.New("torrent candidate closed before metainfo resolution")
+		c.mu.Unlock()
+		close(c.ready)
+		return
 	}
 
 	file, err := resolveTorrentTarget(
