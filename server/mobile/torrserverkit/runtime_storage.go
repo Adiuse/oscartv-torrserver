@@ -195,6 +195,10 @@ func (s *sessionStorage) OpenTorrent(
 func (b *storageBinding) resolveTarget(
 	info *metainfo.Info,
 ) error {
+	if err := validatePublicTorrentMetainfo(info); err != nil {
+		return err
+	}
+
 	length, err := strconv.ParseInt(
 		b.target.LengthBytes,
 		10,

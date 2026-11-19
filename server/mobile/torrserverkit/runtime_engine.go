@@ -435,10 +435,24 @@ func (c *runtimeCandidate) resolve(
 	}
 }
 
+func validatePublicTorrentMetainfo(info *metainfo.Info) error {
+	if info == nil {
+		return errors.New("torrent metainfo is unavailable")
+	}
+	if info.Private != nil && *info.Private {
+		return errors.New("private torrent is not allowed")
+	}
+	return nil
+}
+
 func resolveTorrentTarget(
 	t *torrent.Torrent,
 	target targetConfig,
 ) (*torrent.File, error) {
+	if err := validatePublicTorrentMetainfo(t.Info()); err != nil {
+		return nil, err
+	}
+
 	length, err := strconv.ParseInt(
 		target.LengthBytes,
 		10,

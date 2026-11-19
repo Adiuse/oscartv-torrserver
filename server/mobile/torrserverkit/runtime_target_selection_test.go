@@ -21,6 +21,46 @@ func testIndexedMetainfo() *metainfo.Info {
 	}
 }
 
+func TestPublicTorrentMetainfoGate(t *testing.T) {
+	private := true
+	public := false
+	for _, test := range []struct {
+		name    string
+		private *bool
+		reject  bool
+	}{
+		{name: "private", private: &private, reject: true},
+		{name: "public", private: &public},
+		{name: "unspecified"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			info := testIndexedMetainfo()
+			info.Private = test.private
+			err := validatePublicTorrentMetainfo(info)
+			if (err != nil) != test.reject {
+				t.Fatalf("private gate: unexpected result: %v", err)
+			}
+
+			index := 2
+			binding := &storageBinding{
+				target: targetConfig{
+					Name:         "third.mkv",
+					RelativePath: "third.mkv",
+					LengthBytes:  "200",
+					FileIndex:    &index,
+				},
+			}
+			err = binding.resolveTarget(info)
+			if (err != nil) != test.reject {
+				t.Fatalf("storage gate: unexpected result: %v", err)
+			}
+			if test.reject && binding.info != nil {
+				t.Fatal("private metainfo must not bind a storage target")
+			}
+		})
+	}
+}
+
 func TestStorageSelectsExactIndexedTarget(t *testing.T) {
 	index := 2
 	binding := &storageBinding{
