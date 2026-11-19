@@ -30,6 +30,7 @@ type inspectionFile struct {
     FileIndex int `json:"fileIndex"`
     Name string `json:"name"`
     RelativePath string `json:"relativePath"`
+    OffsetBytes string `json:"offsetBytes"`
     LengthBytes string `json:"lengthBytes"`
 }
 
@@ -176,6 +177,7 @@ func (r *playbackRuntime) inspectTorrent(configJSON string) (string, error) {
             FileIndex: index,
             Name: name,
             RelativePath: relativePath,
+            OffsetBytes: strconv.FormatInt(file.Offset(), 10),
             LengthBytes: strconv.FormatInt(file.Length(), 10),
         })
     }
