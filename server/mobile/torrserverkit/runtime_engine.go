@@ -758,6 +758,36 @@ func (c *runtimeCandidate) updateDemand(
 	return nil
 }
 
+// candidateReadiness reports completion of actual target resolution, not just
+// successful OpenPlayback or activation. No sensitive torrent data is returned.
+func (r *playbackRuntime) candidateReadiness(
+	playbackID string,
+	candidateID string,
+) (string, error) {
+	session, err := r.session(playbackID)
+	if err != nil {
+		return "", err
+	}
+
+	candidate := session.candidates[candidateID]
+	if candidate == nil {
+		return "", errors.New("torrent candidate not found")
+	}
+
+	select {
+	case <-candidate.ready:
+		candidate.mu.Lock()
+		ready := candidate.readyErr == nil && candidate.file != nil
+		candidate.mu.Unlock()
+		if ready {
+			return `{"status":"READY"}`, nil
+		}
+		return `{"status":"FAILED"}`, nil
+	default:
+		return `{"status":"PENDING"}`, nil
+	}
+}
+
 func (r *playbackRuntime) activateCandidate(
 	playbackID string,
 	candidateID string,

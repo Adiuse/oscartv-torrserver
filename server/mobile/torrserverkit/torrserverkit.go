@@ -319,6 +319,26 @@ func ActivateCandidate(playbackID, candidateID string) string {
 	})
 }
 
+// CandidateReadiness is nonblocking and distinguishes pending target resolution
+// from a ready file or a failed metainfo/target match.
+func CandidateReadiness(playbackID, candidateID string) string {
+	runningMu.RLock()
+	defer runningMu.RUnlock()
+
+	if serverStopping || atomic.LoadInt32(&running) != 1 {
+		return `{"error":"torrent runtime is not running"}`
+	}
+	runtime := embeddedRuntime
+	if runtime == nil {
+		return `{"error":"torrent runtime is not running"}`
+	}
+	result, err := runtime.candidateReadiness(playbackID, candidateID)
+	if err != nil {
+		return marshalError(err)
+	}
+	return result
+}
+
 func SuspendCandidate(playbackID, candidateID string) string {
 	return runtimeOperation(func(runtime *playbackRuntime) error {
 		return runtime.suspendCandidate(playbackID, candidateID)
