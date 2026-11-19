@@ -195,6 +195,10 @@ func (s *sessionStorage) OpenTorrent(
 func (b *storageBinding) resolveTarget(
 	info *metainfo.Info,
 ) error {
+	if err := validatePublicTorrentMetainfo(info); err != nil {
+		return err
+	}
+
 	length, err := strconv.ParseInt(
 		b.target.LengthBytes,
 		10,
@@ -210,6 +214,32 @@ func (b *storageBinding) resolveTarget(
 	targetName := normalizePath(
 		b.target.Name,
 	)
+
+	if b.target.FileIndex != nil {
+		if *b.target.FileIndex < 0 {
+			return errors.New("torrent storage target file index is invalid")
+		}
+		index := 0
+		for file := range info.UpvertedFilesIter() {
+			if index != *b.target.FileIndex {
+				index++
+				continue
+			}
+			actualPath := normalizePath(file.DisplayPath(info))
+			if file.Length != length ||
+				basePath(actualPath) != basePath(targetName) ||
+				(targetPath != "" && actualPath != targetPath) {
+				return errors.New("torrent storage target file index mismatches metainfo")
+			}
+			b.mu.Lock()
+			b.info = info
+			b.targetStart = file.TorrentOffset
+			b.targetEnd = file.TorrentOffset + file.Length
+			b.mu.Unlock()
+			return nil
+		}
+		return errors.New("torrent storage target file index is invalid")
+	}
 
 	type resolved struct {
 		start int64

@@ -265,6 +265,33 @@ func VerifyRuntimeCapabilities() string {
 	return string(payload)
 }
 
+func InspectTorrent(configJSON string) string {
+	runningMu.RLock()
+	if serverStopping || atomic.LoadInt32(&running) != 1 || embeddedRuntime == nil {
+		runningMu.RUnlock()
+		return `{"error":"inspection_runtime_unavailable"}`
+	}
+	runtime := embeddedRuntime
+	runningMu.RUnlock()
+
+	result, err := runtime.inspectTorrent(configJSON)
+	if err != nil {
+		return marshalError(err)
+	}
+	return result
+}
+
+// CancelInspection may be called while InspectTorrent is blocked on network I/O.
+func CancelInspection(requestID string) string {
+	runningMu.RLock()
+	runtime := embeddedRuntime
+	runningMu.RUnlock()
+	if runtime != nil {
+		runtime.cancelInspection(requestID)
+	}
+	return ""
+}
+
 func OpenPlayback(configJSON string) string {
 	runningMu.RLock()
 	defer runningMu.RUnlock()
@@ -290,6 +317,26 @@ func ActivateCandidate(playbackID, candidateID string) string {
 	return runtimeOperation(func(runtime *playbackRuntime) error {
 		return runtime.activateCandidate(playbackID, candidateID)
 	})
+}
+
+// CandidateReadiness is nonblocking and distinguishes pending target resolution
+// from a ready file or a failed metainfo/target match.
+func CandidateReadiness(playbackID, candidateID string) string {
+	runningMu.RLock()
+	defer runningMu.RUnlock()
+
+	if serverStopping || atomic.LoadInt32(&running) != 1 {
+		return `{"error":"torrent runtime is not running"}`
+	}
+	runtime := embeddedRuntime
+	if runtime == nil {
+		return `{"error":"torrent runtime is not running"}`
+	}
+	result, err := runtime.candidateReadiness(playbackID, candidateID)
+	if err != nil {
+		return marshalError(err)
+	}
+	return result
 }
 
 func SuspendCandidate(playbackID, candidateID string) string {

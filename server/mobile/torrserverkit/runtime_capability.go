@@ -18,6 +18,7 @@ import (
 type runtimeCapabilityResult struct {
 	Torrent           bool `json:"torrent"`
 	MultiSwarmTorrent bool `json:"multiSwarmTorrent"`
+	TorrentDeferredFileSelectionV1 bool `json:"torrentDeferredFileSelectionV1"`
 }
 
 func (r *playbackRuntime) verifyCapabilities() (runtimeCapabilityResult, error) {
@@ -139,6 +140,7 @@ func probeRuntimeCapabilities(
 		return result, nil
 	}
 	result.Torrent = true
+	result.TorrentDeferredFileSelectionV1 = true
 
 	candidateB, hashB, err := registerCapabilityProbeSwarm(
 		session,

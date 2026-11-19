@@ -28,6 +28,8 @@ type playbackRuntime struct {
 	port     int
 	closed   bool
 	sessions map[string]*runtimePlaybackSession
+	inspectionMu sync.Mutex
+	inspections map[string]context.CancelFunc
 }
 
 type playbackConfig struct {
@@ -50,6 +52,7 @@ type targetConfig struct {
 	Name         string `json:"name"`
 	RelativePath string `json:"relativePath,omitempty"`
 	LengthBytes  string `json:"lengthBytes"`
+	FileIndex    *int `json:"fileIndex,omitempty"`
 }
 
 type runtimePlaybackSession struct {
@@ -186,6 +189,7 @@ func newPlaybackRuntime(
 		root:     root,
 		port:     port,
 		sessions: make(map[string]*runtimePlaybackSession),
+		inspections: make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -406,10 +410,12 @@ func (c *runtimeCandidate) resolve(
 ) {
 	select {
 	case <-c.torrent.GotInfo():
-	case <-time.After(0):
-		select {
-		case <-c.torrent.GotInfo():
-		}
+	case <-c.torrent.Closed():
+		c.mu.Lock()
+		c.readyErr = errors.New("torrent candidate closed before metainfo resolution")
+		c.mu.Unlock()
+		close(c.ready)
+		return
 	}
 
 	file, err := resolveTorrentTarget(
@@ -429,10 +435,24 @@ func (c *runtimeCandidate) resolve(
 	}
 }
 
+func validatePublicTorrentMetainfo(info *metainfo.Info) error {
+	if info == nil {
+		return errors.New("torrent metainfo is unavailable")
+	}
+	if info.Private != nil && *info.Private {
+		return errors.New("private torrent is not allowed")
+	}
+	return nil
+}
+
 func resolveTorrentTarget(
 	t *torrent.Torrent,
 	target targetConfig,
 ) (*torrent.File, error) {
+	if err := validatePublicTorrentMetainfo(t.Info()); err != nil {
+		return nil, err
+	}
+
 	length, err := strconv.ParseInt(
 		target.LengthBytes,
 		10,
@@ -444,6 +464,22 @@ func resolveTorrentTarget(
 
 	relativePath := normalizePath(target.RelativePath)
 	name := normalizePath(target.Name)
+
+	if target.FileIndex != nil {
+		files := t.Files()
+		index := *target.FileIndex
+		if index < 0 || index >= len(files) {
+			return nil, errors.New("torrent target file index is invalid")
+		}
+		file := files[index]
+		actualPath := normalizePath(file.DisplayPath())
+		if file.Length() != length ||
+			basePath(actualPath) != basePath(name) ||
+			(relativePath != "" && actualPath != relativePath) {
+			return nil, errors.New("torrent target file index mismatches metainfo")
+		}
+		return file, nil
+	}
 
 	var pathMatches []*torrent.File
 	var nameMatches []*torrent.File
@@ -736,6 +772,36 @@ func (c *runtimeCandidate) updateDemand(
 	}
 
 	return nil
+}
+
+// candidateReadiness reports completion of actual target resolution, not just
+// successful OpenPlayback or activation. No sensitive torrent data is returned.
+func (r *playbackRuntime) candidateReadiness(
+	playbackID string,
+	candidateID string,
+) (string, error) {
+	session, err := r.session(playbackID)
+	if err != nil {
+		return "", err
+	}
+
+	candidate := session.candidates[candidateID]
+	if candidate == nil {
+		return "", errors.New("torrent candidate not found")
+	}
+
+	select {
+	case <-candidate.ready:
+		candidate.mu.Lock()
+		ready := candidate.readyErr == nil && candidate.file != nil
+		candidate.mu.Unlock()
+		if ready {
+			return `{"status":"READY"}`, nil
+		}
+		return `{"status":"FAILED"}`, nil
+	default:
+		return `{"status":"PENDING"}`, nil
+	}
 }
 
 func (r *playbackRuntime) activateCandidate(
@@ -1072,6 +1138,7 @@ func (r *playbackRuntime) close() error {
 	defer r.mu.Unlock()
 
 	r.closed = true
+	r.cancelInspections()
 
 	var closeErrors []error
 
@@ -1627,6 +1694,9 @@ func validatePlaybackConfig(
 		)
 		if err != nil || length <= 0 {
 			return errors.New("invalid torrent target length")
+		}
+		if candidate.Target.FileIndex != nil && *candidate.Target.FileIndex < 0 {
+			return errors.New("invalid torrent target file index")
 		}
 	}
 
