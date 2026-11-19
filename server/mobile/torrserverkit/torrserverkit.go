@@ -265,6 +265,33 @@ func VerifyRuntimeCapabilities() string {
 	return string(payload)
 }
 
+func InspectTorrent(configJSON string) string {
+	runningMu.RLock()
+	if serverStopping || atomic.LoadInt32(&running) != 1 || embeddedRuntime == nil {
+		runningMu.RUnlock()
+		return `{"error":"inspection_runtime_unavailable"}`
+	}
+	runtime := embeddedRuntime
+	runningMu.RUnlock()
+
+	result, err := runtime.inspectTorrent(configJSON)
+	if err != nil {
+		return marshalError(err)
+	}
+	return result
+}
+
+// CancelInspection may be called while InspectTorrent is blocked on network I/O.
+func CancelInspection(requestID string) string {
+	runningMu.RLock()
+	runtime := embeddedRuntime
+	runningMu.RUnlock()
+	if runtime != nil {
+		runtime.cancelInspection(requestID)
+	}
+	return ""
+}
+
 func OpenPlayback(configJSON string) string {
 	runningMu.RLock()
 	defer runningMu.RUnlock()

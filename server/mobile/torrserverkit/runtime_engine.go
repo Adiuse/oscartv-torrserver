@@ -28,6 +28,8 @@ type playbackRuntime struct {
 	port     int
 	closed   bool
 	sessions map[string]*runtimePlaybackSession
+	inspectionMu sync.Mutex
+	inspections map[string]context.CancelFunc
 }
 
 type playbackConfig struct {
@@ -50,6 +52,7 @@ type targetConfig struct {
 	Name         string `json:"name"`
 	RelativePath string `json:"relativePath,omitempty"`
 	LengthBytes  string `json:"lengthBytes"`
+	FileIndex    *int `json:"fileIndex,omitempty"`
 }
 
 type runtimePlaybackSession struct {
@@ -186,6 +189,7 @@ func newPlaybackRuntime(
 		root:     root,
 		port:     port,
 		sessions: make(map[string]*runtimePlaybackSession),
+		inspections: make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -444,6 +448,22 @@ func resolveTorrentTarget(
 
 	relativePath := normalizePath(target.RelativePath)
 	name := normalizePath(target.Name)
+
+	if target.FileIndex != nil {
+		files := t.Files()
+		index := *target.FileIndex
+		if index < 0 || index >= len(files) {
+			return nil, errors.New("torrent target file index is invalid")
+		}
+		file := files[index]
+		actualPath := normalizePath(file.DisplayPath())
+		if file.Length() != length ||
+			basePath(actualPath) != basePath(name) ||
+			(relativePath != "" && actualPath != relativePath) {
+			return nil, errors.New("torrent target file index mismatches metainfo")
+		}
+		return file, nil
+	}
 
 	var pathMatches []*torrent.File
 	var nameMatches []*torrent.File
@@ -1072,6 +1092,7 @@ func (r *playbackRuntime) close() error {
 	defer r.mu.Unlock()
 
 	r.closed = true
+	r.cancelInspections()
 
 	var closeErrors []error
 
@@ -1627,6 +1648,9 @@ func validatePlaybackConfig(
 		)
 		if err != nil || length <= 0 {
 			return errors.New("invalid torrent target length")
+		}
+		if candidate.Target.FileIndex != nil && *candidate.Target.FileIndex < 0 {
+			return errors.New("invalid torrent target file index")
 		}
 	}
 
