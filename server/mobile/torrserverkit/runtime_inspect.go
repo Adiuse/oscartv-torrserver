@@ -11,6 +11,8 @@ import (
     "time"
 
     "github.com/anacrolix/torrent"
+    "github.com/anacrolix/torrent/metainfo"
+    torrentstorage "github.com/anacrolix/torrent/storage"
     "github.com/anacrolix/torrent/storage/disabled"
 )
 
@@ -63,6 +65,16 @@ func validateInspectionConfig(config inspectionConfig) error {
         return errors.New("inspection_invalid_identity")
     }
     return nil
+}
+
+type inspectionDisabledStorage struct{}
+
+func (inspectionDisabledStorage) OpenTorrent(
+    _ context.Context,
+    info *metainfo.Info,
+    infoHash metainfo.Hash,
+) (torrentstorage.TorrentImpl, error) {
+    return disabled.Client{}.OpenTorrent(info, infoHash)
 }
 
 // Each inspection uses a separate client, no movie-data storage, and a strict
@@ -121,7 +133,7 @@ func (r *playbackRuntime) inspectTorrent(configJSON string) (string, error) {
     spec.DisallowDataUpload = true
 
     clientConfig := torrent.NewDefaultClientConfig()
-    clientConfig.DefaultStorage = disabled.Client{}
+    clientConfig.DefaultStorage = inspectionDisabledStorage{}
     clientConfig.NoUpload = true
     clientConfig.NoDefaultPortForwarding = true
     clientConfig.DisableIPv6 = true
